@@ -9,13 +9,11 @@
   <style>
     .admin-wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
     .admin-wrap h1 { margin-bottom: 24px; }
-    .coll-row {
-      padding: 16px 0; border-bottom: 1px solid var(--line);
-    }
-    .coll-row .top { display: flex; align-items: center; gap: 14px; }
+    .coll-row { padding: 16px 0; border-bottom: 1px solid var(--line); }
+    .coll-row .top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .coll-row .thumb { width: 56px; height: 42px; border-radius: 6px; overflow: hidden; background: var(--ink); flex-shrink: 0; }
     .coll-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .coll-row .info { flex: 1; }
+    .coll-row .info { flex: 1; min-width: 140px; }
     .coll-row .info strong { display: block; font-family: "Fraunces", Georgia, serif; }
     .coll-row .info span { color: var(--ink-soft); font-size: 0.9rem; }
     .badge { display: inline-block; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; background: #E3EDE7; color: var(--moss); }
@@ -24,9 +22,11 @@
     @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
     .items-panel { margin-top: 14px; padding: 16px; background: var(--paper-card); border-radius: 12px; display: none; }
     .items-panel.open { display: block; }
-    .item-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
-    .item-row .item-type { font-weight: 600; width: 50px; }
-    .item-row .item-key { flex: 1; color: var(--ink-soft); word-break: break-all; }
+    .item-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; flex-wrap: wrap; }
+    .item-row .item-type { font-weight: 600; width: 30px; }
+    .item-row .item-key { flex: 1; min-width: 140px; color: var(--ink-soft); word-break: break-all; }
+    .item-row label.check { font-size: 0.85rem; margin: 0; }
+    .pending-list { margin-top: 10px; font-size: 0.88rem; color: var(--ink-soft); }
   </style>
 </head>
 <body>
@@ -58,6 +58,14 @@
         <div class="field">
           <label>Cover image</label>
           <input id="f-cover" type="file" accept="image/*">
+          <p class="hint">A single thumbnail image, shown on the homepage.</p>
+        </div>
+
+        <div class="field">
+          <label>Photos &amp; videos</label>
+          <input id="f-media" type="file" multiple>
+          <p class="hint">Select as many as you like. New items start locked; mark free previews afterward in "Manage items" below.</p>
+          <p class="pending-list" id="pending-list"></p>
         </div>
 
         <div style="display:flex; gap:10px;">
@@ -91,11 +99,19 @@
     const fPrice = document.getElementById("f-price");
     const fPublished = document.getElementById("f-published");
     const fCover = document.getElementById("f-cover");
+    const fMedia = document.getElementById("f-media");
+    const pendingList = document.getElementById("pending-list");
     const saveButton = document.getElementById("save-button");
     const cancelButton = document.getElementById("cancel-button");
     const formMsg = document.getElementById("form-msg");
     const listNote = document.getElementById("list-note");
     const collList = document.getElementById("coll-list");
+
+    fMedia.addEventListener("change", function () {
+      if (fMedia.files.length === 0) { pendingList.textContent = ""; return; }
+      pendingList.textContent = fMedia.files.length + " file(s) selected: " +
+        Array.from(fMedia.files).map(function (f) { return f.name; }).join(", ");
+    });
 
     function showFormMsg(text, isError) {
       formMsg.textContent = text;
@@ -120,7 +136,28 @@
       loadCollections();
     });
 
-    async function loadCollections() {
+    // Uploads one file and registers it as a media item on a collection.
+    async function uploadMediaItem(collectionId, file, isFree, sortOrder) {
+      const type = file.type.startsWith("video") ? "video" : "photo";
+      const extension = file.name.includes(".") ? file.name.split(".").pop() : (type === "video" ? "mp4" : "jpg");
+      const fileKey = collectionId + "/" + crypto.randomUUID() + "." + extension;
+
+      const uploadResp = await adminFetch("/admin/upload/" + fileKey.split("/").map(encodeURIComponent).join("/"), {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file
+      });
+      if (!uploadResp.ok) throw new Error('Upload failed for "' + file.name + '".');
+
+      const createResp = await adminFetch("/admin/collections/" + encodeURIComponent(collectionId) + "/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: type, fileKey: fileKey, isFree: !!isFree, sortOrder: sortOrder })
+      });
+      if (!createResp.ok) throw new Error('Could not save "' + file.name + '" to the collection.');
+    }
+
+    async function loadCollections(openItemsForId) {
       listNote.textContent = "Loading...";
       const response = await adminFetch("/admin/collections");
       if (!response.ok) { listNote.textContent = "Could not load collections."; return; }
@@ -180,6 +217,12 @@
 
         row.append(top, itemsPanel);
         collList.append(row);
+
+        if (openItemsForId && c.id === openItemsForId) {
+          itemsPanel.classList.add("open");
+          loadItems(c.id, itemsPanel);
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
       });
     }
 
@@ -192,10 +235,11 @@
 
       const addForm = document.createElement("div");
       addForm.innerHTML =
-        '<div class="field"><label>Add a photo or video</label><input type="file" class="new-item-file"></div>' +
+        '<div class="field"><label>Add another photo or video</label><input type="file" class="new-item-file"></div>' +
         '<label class="check" style="margin-bottom:10px;"><input type="checkbox" class="new-item-free"><span>Free preview</span></label>' +
         '<button class="btn-outline add-item-btn" type="button">Upload item</button>' +
-        '<p class="msg item-msg" hidden></p>';
+        '<p class="msg item-msg" hidden></p>' +
+        '<hr style="margin:16px 0; border:none; border-top:1px solid var(--line);">';
       panel.append(addForm);
 
       const fileInput = addForm.querySelector(".new-item-file");
@@ -204,30 +248,14 @@
       const itemMsg = addForm.querySelector(".item-msg");
 
       addBtn.addEventListener("click", async function () {
-        if (!fileInput.files.length) { itemMsg.hidden = false; itemMsg.className = "msg error"; itemMsg.textContent = "Choose a file first."; return; }
-        const file = fileInput.files[0];
-        const type = file.type.startsWith("video") ? "video" : "photo";
-        const extension = file.name.includes(".") ? file.name.split(".").pop() : (type === "video" ? "mp4" : "jpg");
-        const fileKey = collectionId + "/" + crypto.randomUUID() + "." + extension;
-
+        if (!fileInput.files.length) {
+          itemMsg.hidden = false; itemMsg.className = "msg error"; itemMsg.textContent = "Choose a file first.";
+          return;
+        }
         addBtn.disabled = true;
         itemMsg.hidden = false; itemMsg.className = "msg"; itemMsg.textContent = "Uploading...";
-
         try {
-          const uploadResp = await adminFetch("/admin/upload/" + fileKey.split("/").map(encodeURIComponent).join("/"), {
-            method: "PUT",
-            headers: { "Content-Type": file.type || "application/octet-stream" },
-            body: file
-          });
-          if (!uploadResp.ok) throw new Error("Upload failed.");
-
-          const createResp = await adminFetch("/admin/collections/" + encodeURIComponent(collectionId) + "/items", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: type, fileKey: fileKey, isFree: freeCheck.checked, sortOrder: items.length })
-          });
-          if (!createResp.ok) throw new Error("Could not save item.");
-
+          await uploadMediaItem(collectionId, fileInput.files[0], freeCheck.checked, items.length);
           itemMsg.textContent = "Added.";
           loadItems(collectionId, panel);
         } catch (error) {
@@ -247,7 +275,21 @@
 
         const key = document.createElement("span");
         key.className = "item-key";
-        key.textContent = item.fileKey + (item.isFree ? "  (free)" : "");
+        key.textContent = item.fileKey;
+
+        const freeLabel = document.createElement("label");
+        freeLabel.className = "check";
+        const freeInput = document.createElement("input");
+        freeInput.type = "checkbox";
+        freeInput.checked = !!item.isFree;
+        freeInput.addEventListener("change", async function () {
+          await adminFetch("/admin/items/" + encodeURIComponent(item.id), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ isFree: freeInput.checked })
+          });
+        });
+        freeLabel.append(freeInput, document.createTextNode(" Free"));
 
         const delBtn = document.createElement("button");
         delBtn.className = "btn-outline"; delBtn.textContent = "Delete"; delBtn.type = "button";
@@ -258,7 +300,7 @@
           loadItems(collectionId, panel);
         });
 
-        row.append(type, key, delBtn);
+        row.append(type, key, freeLabel, delBtn);
         panel.append(row);
       });
     }
@@ -271,6 +313,8 @@
       fPrice.value = c.price || "";
       fPublished.checked = !!c.published;
       fCover.value = "";
+      fMedia.value = "";
+      pendingList.textContent = "";
       cancelButton.hidden = false;
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -279,7 +323,8 @@
       editingId = null;
       formTitle.textContent = "Add a new collection";
       fTitle.value = ""; fDescription.value = ""; fPrice.value = "";
-      fPublished.checked = true; fCover.value = "";
+      fPublished.checked = true; fCover.value = ""; fMedia.value = "";
+      pendingList.textContent = "";
       cancelButton.hidden = true;
     }
     cancelButton.addEventListener("click", resetForm);
@@ -340,9 +385,19 @@
           });
         }
 
+        // Upload any photos/videos selected in the main form.
+        if (fMedia.files.length > 0) {
+          showFormMsg("Uploading " + fMedia.files.length + " file(s)...", false);
+          let sortOrder = 0;
+          for (const file of fMedia.files) {
+            await uploadMediaItem(collectionId, file, false, sortOrder);
+            sortOrder++;
+          }
+        }
+
         showFormMsg("Saved.", false);
         resetForm();
-        loadCollections();
+        await loadCollections(collectionId);
       } catch (error) {
         console.error(error);
         showFormMsg(error.message || "Something went wrong.", true);
