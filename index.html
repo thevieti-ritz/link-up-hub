@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Link-up Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="site-header"></div>
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <h1>Scenery worth seeing, up close.</h1>
+        <p>Browse free previews from every collection. Unlock the full set with mobile money, view it anytime.</p>
+      </div>
+    </section>
+
+    <section class="section" id="collections">
+      <div class="wrap">
+        <p class="note" id="list-note">Loading collections...</p>
+        <div class="grid" id="collection-list"></div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer"></div>
+
+  <script src="site.js"></script>
+  <script type="module">
+    import { fetchCollections, make, formatPrice, coverUrl } from "./store.js";
+
+    const list = document.getElementById("collection-list");
+    const note = document.getElementById("list-note");
+
+    function makeCard(c) {
+      const card = make("article", "coll-card");
+      const link = make("a");
+      link.href = "collection.html?id=" + encodeURIComponent(c.id);
+
+      const thumb = make("div", "thumb");
+      const imgUrl = coverUrl(c.coverImage);
+      if (imgUrl) {
+        const img = make("img");
+        img.src = imgUrl;
+        img.alt = c.title;
+        thumb.append(img);
+      }
+      link.append(thumb);
+
+      const title = make("h3", "", c.title);
+      const row = make("div", "row");
+      row.append(make("span", "price", formatPrice(c.price)), make("span", "free-badge", "Free preview"));
+
+      card.append(link, title, row);
+      return card;
+    }
+
+    async function load() {
+      try {
+        const collections = await fetchCollections();
+        list.innerHTML = "";
+
+        if (collections.length === 0) {
+          note.textContent = "No collections yet. Check back soon.";
+          return;
+        }
+
+        note.textContent = "";
+        collections.forEach(function (c) { list.append(makeCard(c)); });
+      } catch (error) {
+        console.error(error);
+        note.textContent = "Collections could not be loaded. Please refresh.";
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
