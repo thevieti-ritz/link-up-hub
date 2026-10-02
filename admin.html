@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin | The Link-up Hub</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    .admin-wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+    .admin-wrap h1 { margin-bottom: 24px; }
+    .coll-row {
+      padding: 16px 0; border-bottom: 1px solid var(--line);
+    }
+    .coll-row .top { display: flex; align-items: center; gap: 14px; }
+    .coll-row .thumb { width: 56px; height: 42px; border-radius: 6px; overflow: hidden; background: var(--ink); flex-shrink: 0; }
+    .coll-row .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .coll-row .info { flex: 1; }
+    .coll-row .info strong { display: block; font-family: "Fraunces", Georgia, serif; }
+    .coll-row .info span { color: var(--ink-soft); font-size: 0.9rem; }
+    .badge { display: inline-block; font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; background: #E3EDE7; color: var(--moss); }
+    .badge.off { background: #F1E7DC; color: var(--error); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+    .items-panel { margin-top: 14px; padding: 16px; background: var(--paper-card); border-radius: 12px; display: none; }
+    .items-panel.open { display: block; }
+    .item-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+    .item-row .item-type { font-weight: 600; width: 50px; }
+    .item-row .item-key { flex: 1; color: var(--ink-soft); word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="admin-wrap">
+    <h1>The Link-up Hub admin</h1>
+
+    <div class="paywall" id="login-box" style="max-width:none;">
+      <h2>Enter admin password</h2>
+      <div class="field"><input id="password-input" type="password" placeholder="Admin password"></div>
+      <button class="btn" id="login-button">Enter</button>
+      <p class="msg error" id="login-error" hidden></p>
+    </div>
+
+    <div id="admin-area" hidden>
+      <div class="paywall" style="max-width:none; margin-bottom:28px;">
+        <h2 id="form-title">Add a new collection</h2>
+
+        <div class="field"><label>Title</label><input id="f-title" type="text"></div>
+        <div class="field"><label>Description</label><input id="f-description" type="text"></div>
+
+        <div class="grid-2">
+          <div class="field"><label>Price (UGX)</label><input id="f-price" type="number" min="500" step="1"></div>
+          <div class="field">
+            <label>Published</label>
+            <label class="check"><input type="checkbox" id="f-published" checked><span>Visible on the site</span></label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Cover image</label>
+          <input id="f-cover" type="file" accept="image/*">
+        </div>
+
+        <div style="display:flex; gap:10px;">
+          <button class="btn" id="save-button">Save collection</button>
+          <button class="btn-outline" id="cancel-button" type="button" hidden>Cancel edit</button>
+        </div>
+        <p class="msg" id="form-msg" hidden></p>
+      </div>
+
+      <div class="paywall" style="max-width:none;">
+        <h2>Your collections</h2>
+        <p class="note" id="list-note">Loading...</p>
+        <div id="coll-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    const API_BASE = "https://linkuphub-helper.dbernardinvestments.workers.dev";
+
+    let adminPassword = "";
+    let allCollections = [];
+    let editingId = null;
+
+    const loginBox = document.getElementById("login-box");
+    const adminArea = document.getElementById("admin-area");
+    const loginError = document.getElementById("login-error");
+    const formTitle = document.getElementById("form-title");
+    const fTitle = document.getElementById("f-title");
+    const fDescription = document.getElementById("f-description");
+    const fPrice = document.getElementById("f-price");
+    const fPublished = document.getElementById("f-published");
+    const fCover = document.getElementById("f-cover");
+    const saveButton = document.getElementById("save-button");
+    const cancelButton = document.getElementById("cancel-button");
+    const formMsg = document.getElementById("form-msg");
+    const listNote = document.getElementById("list-note");
+    const collList = document.getElementById("coll-list");
+
+    function showFormMsg(text, isError) {
+      formMsg.textContent = text;
+      formMsg.className = isError ? "msg error" : "msg";
+      formMsg.hidden = false;
+    }
+
+    async function adminFetch(path, options) {
+      options = options || {};
+      options.headers = Object.assign({}, options.headers, { "X-Admin-Password": adminPassword });
+      return fetch(API_BASE + path, options);
+    }
+
+    document.getElementById("login-button").addEventListener("click", async function () {
+      const tryPassword = document.getElementById("password-input").value;
+      loginError.hidden = true;
+      const response = await fetch(API_BASE + "/admin/collections", { headers: { "X-Admin-Password": tryPassword } });
+      if (!response.ok) { loginError.textContent = "Wrong password."; loginError.hidden = false; return; }
+      adminPassword = tryPassword;
+      loginBox.hidden = true;
+      adminArea.hidden = false;
+      loadCollections();
+    });
+
+    async function loadCollections() {
+      listNote.textContent = "Loading...";
+      const response = await adminFetch("/admin/collections");
+      if (!response.ok) { listNote.textContent = "Could not load collections."; return; }
+      allCollections = await response.json();
+      collList.innerHTML = "";
+
+      if (allCollections.length === 0) { listNote.textContent = "No collections yet."; return; }
+      listNote.textContent = "";
+
+      allCollections.forEach(function (c) {
+        const row = document.createElement("div");
+        row.className = "coll-row";
+
+        const top = document.createElement("div");
+        top.className = "top";
+
+        const thumb = document.createElement("div");
+        thumb.className = "thumb";
+        if (c.coverImage) {
+          const img = document.createElement("img");
+          img.src = API_BASE + "/covers/" + c.coverImage;
+          thumb.append(img);
+        }
+
+        const info = document.createElement("div");
+        info.className = "info";
+        const strong = document.createElement("strong");
+        strong.textContent = c.title;
+        const span = document.createElement("span");
+        span.textContent = "UGX " + Number(c.price).toLocaleString("en-US");
+        info.append(strong, span);
+
+        const badge = document.createElement("span");
+        badge.className = "badge" + (c.published ? "" : " off");
+        badge.textContent = c.published ? "Published" : "Hidden";
+
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn-outline"; editBtn.textContent = "Edit"; editBtn.type = "button";
+        editBtn.addEventListener("click", function () { startEdit(c); });
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "btn-outline"; deleteBtn.textContent = "Delete"; deleteBtn.type = "button";
+        deleteBtn.style.borderColor = "var(--error)"; deleteBtn.style.color = "var(--error)";
+        deleteBtn.addEventListener("click", function () { deleteCollection(c); });
+
+        const itemsBtn = document.createElement("button");
+        itemsBtn.className = "btn-outline"; itemsBtn.textContent = "Manage items"; itemsBtn.type = "button";
+
+        top.append(thumb, info, badge, editBtn, itemsBtn, deleteBtn);
+
+        const itemsPanel = document.createElement("div");
+        itemsPanel.className = "items-panel";
+        itemsBtn.addEventListener("click", function () {
+          itemsPanel.classList.toggle("open");
+          if (itemsPanel.classList.contains("open")) loadItems(c.id, itemsPanel);
+        });
+
+        row.append(top, itemsPanel);
+        collList.append(row);
+      });
+    }
+
+    async function loadItems(collectionId, panel) {
+      panel.innerHTML = "Loading items...";
+      const response = await adminFetch("/admin/collections/" + encodeURIComponent(collectionId) + "/items");
+      const items = await response.json();
+
+      panel.innerHTML = "";
+
+      const addForm = document.createElement("div");
+      addForm.innerHTML =
+        '<div class="field"><label>Add a photo or video</label><input type="file" class="new-item-file" accept="image/*,video/*"></div>' +
+        '<label class="check" style="margin-bottom:10px;"><input type="checkbox" class="new-item-free"><span>Free preview</span></label>' +
+        '<button class="btn-outline add-item-btn" type="button">Upload item</button>' +
+        '<p class="msg item-msg" hidden></p>';
+      panel.append(addForm);
+
+      const fileInput = addForm.querySelector(".new-item-file");
+      const freeCheck = addForm.querySelector(".new-item-free");
+      const addBtn = addForm.querySelector(".add-item-btn");
+      const itemMsg = addForm.querySelector(".item-msg");
+
+      addBtn.addEventListener("click", async function () {
+        if (!fileInput.files.length) { itemMsg.hidden = false; itemMsg.className = "msg error"; itemMsg.textContent = "Choose a file first."; return; }
+        const file = fileInput.files[0];
+        const type = file.type.startsWith("video") ? "video" : "photo";
+        const extension = file.name.includes(".") ? file.name.split(".").pop() : (type === "video" ? "mp4" : "jpg");
+        const fileKey = collectionId + "/" + crypto.randomUUID() + "." + extension;
+
+        addBtn.disabled = true;
+        itemMsg.hidden = false; itemMsg.className = "msg"; itemMsg.textContent = "Uploading...";
+
+        try {
+          const uploadResp = await adminFetch("/admin/upload/" + fileKey.split("/").map(encodeURIComponent).join("/"), {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file
+          });
+          if (!uploadResp.ok) throw new Error("Upload failed.");
+
+          const createResp = await adminFetch("/admin/collections/" + encodeURIComponent(collectionId) + "/items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: type, fileKey: fileKey, isFree: freeCheck.checked, sortOrder: items.length })
+          });
+          if (!createResp.ok) throw new Error("Could not save item.");
+
+          itemMsg.textContent = "Added.";
+          loadItems(collectionId, panel);
+        } catch (error) {
+          itemMsg.className = "msg error";
+          itemMsg.textContent = error.message || "Something went wrong.";
+          addBtn.disabled = false;
+        }
+      });
+
+      items.forEach(function (item) {
+        const row = document.createElement("div");
+        row.className = "item-row";
+
+        const type = document.createElement("span");
+        type.className = "item-type";
+        type.textContent = item.type === "video" ? "🎬" : "🖼️";
+
+        const key = document.createElement("span");
+        key.className = "item-key";
+        key.textContent = item.fileKey + (item.isFree ? "  (free)" : "");
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-outline"; delBtn.textContent = "Delete"; delBtn.type = "button";
+        delBtn.style.borderColor = "var(--error)"; delBtn.style.color = "var(--error)";
+        delBtn.addEventListener("click", async function () {
+          if (!confirm("Delete this item?")) return;
+          await adminFetch("/admin/items/" + encodeURIComponent(item.id), { method: "DELETE" });
+          loadItems(collectionId, panel);
+        });
+
+        row.append(type, key, delBtn);
+        panel.append(row);
+      });
+    }
+
+    function startEdit(c) {
+      editingId = c.id;
+      formTitle.textContent = "Edit: " + c.title;
+      fTitle.value = c.title || "";
+      fDescription.value = c.description || "";
+      fPrice.value = c.price || "";
+      fPublished.checked = !!c.published;
+      fCover.value = "";
+      cancelButton.hidden = false;
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function resetForm() {
+      editingId = null;
+      formTitle.textContent = "Add a new collection";
+      fTitle.value = ""; fDescription.value = ""; fPrice.value = "";
+      fPublished.checked = true; fCover.value = "";
+      cancelButton.hidden = true;
+    }
+    cancelButton.addEventListener("click", resetForm);
+
+    async function deleteCollection(c) {
+      if (!confirm('Delete "' + c.title + '" and all its photos/videos? This cannot be undone.')) return;
+      const response = await adminFetch("/admin/collections/" + encodeURIComponent(c.id), { method: "DELETE" });
+      if (!response.ok) { alert("Could not delete."); return; }
+      if (editingId === c.id) resetForm();
+      loadCollections();
+    }
+
+    saveButton.addEventListener("click", async function () {
+      if (!fTitle.value || !fPrice.value) { showFormMsg("Title and price are required.", true); return; }
+
+      saveButton.disabled = true;
+      showFormMsg("Saving...", false);
+
+      const data = {
+        title: fTitle.value,
+        description: fDescription.value,
+        price: Number(fPrice.value),
+        published: fPublished.checked
+      };
+
+      try {
+        let collectionId = editingId;
+        const existing = collectionId ? allCollections.find(function (c) { return c.id === collectionId; }) : null;
+        data.coverImage = existing ? existing.coverImage : null;
+
+        if (collectionId) {
+          const response = await adminFetch("/admin/collections/" + encodeURIComponent(collectionId), {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+          });
+          if (!response.ok) throw new Error("Could not save changes.");
+        } else {
+          const response = await adminFetch("/admin/collections", {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+          });
+          if (!response.ok) throw new Error("Could not create collection.");
+          const result = await response.json();
+          collectionId = result.id;
+        }
+
+        if (fCover.files.length > 0) {
+          const image = fCover.files[0];
+          const extension = image.name.includes(".") ? image.name.split(".").pop() : "jpg";
+          const coverKey = "covers/" + collectionId + "." + extension;
+
+          const uploadResp = await adminFetch("/admin/upload/" + coverKey.split("/").map(encodeURIComponent).join("/"), {
+            method: "PUT", headers: { "Content-Type": image.type || "image/jpeg" }, body: image
+          });
+          if (!uploadResp.ok) throw new Error("Collection saved, but the cover upload failed.");
+
+          data.coverImage = coverKey;
+          await adminFetch("/admin/collections/" + encodeURIComponent(collectionId), {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+          });
+        }
+
+        showFormMsg("Saved.", false);
+        resetForm();
+        loadCollections();
+      } catch (error) {
+        console.error(error);
+        showFormMsg(error.message || "Something went wrong.", true);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
