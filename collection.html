@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Collection</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-title="Collection">
+  <div id="site-header"></div>
+
+  <main>
+    <div class="wrap">
+      <p class="note" id="load-note">Loading...</p>
+
+      <div id="coll-content" hidden>
+        <section class="coll-head">
+          <h1 id="c-title"></h1>
+          <p id="c-desc"></p>
+          <p class="price-big" id="c-price"></p>
+        </section>
+
+        <h2>Free preview</h2>
+        <div class="media-grid" id="free-grid"></div>
+
+        <div class="paywall" id="paywall">
+          <h2>View the full collection</h2>
+          <p style="color:var(--ink-soft); margin-bottom:16px;">Already paid? Enter the same details to view it. Haven't paid yet? We'll start that for you.</p>
+
+          <div class="field">
+            <label for="phone">Mobile money number</label>
+            <input id="phone" type="tel" placeholder="07XXXXXXXX">
+          </div>
+          <div class="field">
+            <label for="email">Email address</label>
+            <input id="email" type="email" placeholder="you@example.com">
+          </div>
+
+          <button class="btn btn-block" id="unlock-button">Unlock full collection</button>
+          <p class="msg" id="unlock-msg" hidden></p>
+        </div>
+
+        <div id="full-section" hidden>
+          <h2>Full collection</h2>
+          <div class="media-grid" id="full-grid"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script src="site.js"></script>
+  <script type="module">
+    import { API_BASE, fetchCollection, formatPrice } from "./store.js";
+
+    const collectionId = new URLSearchParams(window.location.search).get("id");
+    const loadNote = document.getElementById("load-note");
+    const content = document.getElementById("coll-content");
+
+    let collection = null;
+
+    function makeMediaTile(item, locked, srcUrl) {
+      const tile = document.createElement("div");
+      tile.className = "media-item" + (locked ? " locked" : "");
+
+      if (!locked) {
+        if (item.type === "video") {
+          const video = document.createElement("video");
+          video.src = srcUrl;
+          video.controls = true;
+          tile.append(video);
+        } else {
+          const img = document.createElement("img");
+          img.src = srcUrl;
+          img.alt = "";
+          tile.append(img);
+        }
+      }
+
+      return tile;
+    }
+
+    async function loadCollection() {
+      if (!collectionId) {
+        loadNote.textContent = "Collection not found.";
+        return;
+      }
+
+      try {
+        collection = await fetchCollection(collectionId);
+
+        if (!collection) {
+          loadNote.textContent = "Collection not found.";
+          return;
+        }
+
+        loadNote.hidden = true;
+        content.hidden = false;
+        document.title = collection.title + " | " + window.SITE.name;
+
+        document.getElementById("c-title").textContent = collection.title;
+        document.getElementById("c-desc").textContent = collection.description || "";
+        document.getElementById("c-price").textContent =
+          formatPrice(collection.price) + " for the full collection (" + collection.totalItems + " items)";
+
+        const freeGrid = document.getElementById("free-grid");
+        collection.freeItems.forEach(function (item) {
+          freeGrid.append(makeMediaTile(item, false, API_BASE + "/media/" + item.fileKey));
+        });
+      } catch (error) {
+        console.error(error);
+        loadNote.hidden = false;
+        loadNote.textContent = "This collection could not be loaded. Please refresh.";
+      }
+    }
+
+    function showMsg(text, isError) {
+      const msg = document.getElementById("unlock-msg");
+      msg.textContent = text;
+      msg.className = isError ? "msg error" : "msg";
+      msg.hidden = false;
+    }
+
+    function isUgandanNumber(text) {
+      const digits = text.replace(/\D/g, "");
+      return /^07\d{8}$/.test(digits) || /^2567\d{8}$/.test(digits);
+    }
+
+    async function showFullCollection(phone, email) {
+      const response = await fetch(
+        API_BASE + "/unlocked?collectionId=" + encodeURIComponent(collectionId) +
+        "&phone=" + encodeURIComponent(phone) + "&email=" + encodeURIComponent(email)
+      );
+
+      if (!response.ok) return false;
+
+      const items = await response.json();
+      const fullGrid = document.getElementById("full-grid");
+      fullGrid.innerHTML = "";
+
+      items.forEach(function (item) {
+        const viewUrl = API_BASE + "/view/" + encodeURIComponent(collectionId) + "/" + encodeURIComponent(item.id) +
+          "?phone=" + encodeURIComponent(phone) + "&email=" + encodeURIComponent(email);
+        fullGrid.append(makeMediaTile(item, false, viewUrl));
+      });
+
+      document.getElementById("paywall").hidden = true;
+      document.getElementById("full-section").hidden = false;
+      return true;
+    }
+
+    async function waitForPayment(orderId, phone, email) {
+      const maxAttempts = 24;
+      let attempts = 0;
+
+      const timer = setInterval(async function () {
+        attempts++;
+        try {
+          const response = await fetch(API_BASE + "/orders/" + encodeURIComponent(orderId));
+          const order = await response.json();
+
+          if (order.status === "paid") {
+            clearInterval(timer);
+            await showFullCollection(phone, email);
+            return;
+          }
+          if (order.status === "failed") {
+            clearInterval(timer);
+            showMsg("The payment was not completed. Please try again.", true);
+            document.getElementById("unlock-button").disabled = false;
+            return;
+          }
+        } catch (error) {
+          console.error(error);
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(timer);
+          showMsg("This is taking longer than expected. If you approved the payment, refresh this page and try the form again with the same details.", true);
+        }
+      }, 5000);
+    }
+
+    document.getElementById("unlock-button").addEventListener("click", async function () {
+      const phone = document.getElementById("phone").value;
+      const email = document.getElementById("email").value;
+      const button = this;
+
+      if (!isUgandanNumber(phone) || !email) {
+        showMsg("Enter a valid MTN or Airtel number and your email.", true);
+        return;
+      }
+
+      button.disabled = true;
+      showMsg("Checking...", false);
+
+      // First, see if this phone+email already has access, no new payment needed.
+      const alreadyUnlocked = await showFullCollection(phone, email);
+      if (alreadyUnlocked) {
+        button.disabled = false;
+        return;
+      }
+
+      // Otherwise, start a new payment.
+      showMsg("Starting your payment...", false);
+
+      try {
+        const response = await fetch(API_BASE + "/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ collectionId: collectionId, phone: phone, email: email })
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          showMsg(result.error || "Something went wrong.", true);
+          button.disabled = false;
+          return;
+        }
+
+        showMsg("Check your phone for the payment prompt...", false);
+        waitForPayment(result.orderId, phone, email);
+      } catch (error) {
+        console.error(error);
+        showMsg("Something went wrong. Please try again.", true);
+        button.disabled = false;
+      }
+    });
+
+    loadCollection();
+  </script>
+</body>
+</html>
