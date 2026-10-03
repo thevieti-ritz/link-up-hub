@@ -1,7 +1,8 @@
 window.SITE = {
   name: "The Link-up Hub",
   tagline: "Scenery photo and video collections",
-  email: "hello@example.com"
+  email: "d.linkuphub@gmail.com",
+  whatsapp: "256792713519"
 };
 
 (function () {
@@ -38,4 +39,10 @@ window.SITE = {
     el.href = "mailto:" + site.email;
     el.textContent = site.email;
   });
+
+  var whatsappLink = document.getElementById("whatsapp-link");
+  if (whatsappLink && site.whatsapp) {
+    whatsappLink.href = "https://wa.me/" + site.whatsapp;
+    whatsappLink.hidden = false;
+  }
 })();
