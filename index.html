@@ -111,20 +111,11 @@
         }
 
         note.textContent = "";
-        collections.forEach(function (c, i) { list.append(makeCard(c, i)); });
-
-        // Newly-added cards need the observer attached manually,
-        // since they're added after the page's own load event.
-        if ("IntersectionObserver" in window) {
-          requestAnimationFrame(function () {
-            document.querySelectorAll(".reveal:not(.in-view)").forEach(function (el) {
-              const rect = el.getBoundingClientRect();
-              if (rect.top < window.innerHeight) {
-                el.classList.add("in-view");
-              }
-            });
-          });
-        }
+        collections.forEach(function (c, i) {
+          const card = makeCard(c, i);
+          list.append(card);
+          if (window.observeReveal) window.observeReveal(card);
+        });
       } catch (error) {
         console.error(error);
         list.innerHTML = "";

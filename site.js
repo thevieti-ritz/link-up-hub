@@ -70,7 +70,9 @@ window.SITE = {
   }
 
   // Scroll-reveal: anything with class "reveal" fades up into view once,
-  // as the visitor scrolls to it, rather than all animating at once on load.
+  // as the visitor scrolls to it. window.observeReveal lets pages register
+  // elements added later by their own scripts (like fetched cards), not
+  // just ones present when the page first loads.
   if ("IntersectionObserver" in window) {
     var observer = new IntersectionObserver(function (entries) {
       entries.forEach(function (entry) {
@@ -81,8 +83,13 @@ window.SITE = {
       });
     }, { threshold: 0.15 });
 
+    window.observeReveal = function (el) { observer.observe(el); };
+
     document.addEventListener("DOMContentLoaded", function () {
       document.querySelectorAll(".reveal").forEach(function (el) { observer.observe(el); });
     });
+  } else {
+    // No IntersectionObserver support: just show everything immediately.
+    window.observeReveal = function (el) { el.classList.add("in-view"); };
   }
 })();
