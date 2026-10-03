@@ -22,6 +22,11 @@
 
         <h2>Free preview</h2>
         <div class="media-grid" id="free-grid"></div>
+        <div class="field" id="contact-preview" hidden style="max-width:300px;">
+          <label>Uploader contact</label>
+          <input type="text" value="●●● ●●● ●●●" disabled style="filter: blur(4px); letter-spacing: 2px;">
+          <p class="hint">Visible once you've unlocked this profile.</p>
+        </div>
 
         <div class="paywall" id="paywall">
           <h2>View the full collection</h2>
@@ -104,6 +109,8 @@
         document.getElementById("c-price").textContent =
           formatPrice(collection.price) + " for the full collection (" + collection.totalItems + " items)";
 
+        document.getElementById("contact-preview").hidden = false;
+
         const freeGrid = document.getElementById("free-grid");
         collection.freeItems.forEach(function (item) {
           freeGrid.append(makeMediaTile(item, false, API_BASE + "/media/" + item.fileKey));
@@ -135,15 +142,23 @@
 
       if (!response.ok) return false;
 
-      const items = await response.json();
+      const data = await response.json();
       const fullGrid = document.getElementById("full-grid");
       fullGrid.innerHTML = "";
 
-      items.forEach(function (item) {
+      data.items.forEach(function (item) {
         const viewUrl = API_BASE + "/view/" + encodeURIComponent(collectionId) + "/" + encodeURIComponent(item.id) +
           "?phone=" + encodeURIComponent(phone) + "&email=" + encodeURIComponent(email);
         fullGrid.append(makeMediaTile(item, false, viewUrl));
       });
+
+      const contactPreview = document.getElementById("contact-preview");
+      if (data.contactPhone) {
+        contactPreview.querySelector("input").value = data.contactPhone;
+        contactPreview.querySelector("input").style.filter = "none";
+        contactPreview.querySelector("input").style.letterSpacing = "normal";
+        contactPreview.querySelector(".hint").textContent = "Contact the uploader for more copies.";
+      }
 
       document.getElementById("paywall").hidden = true;
       document.getElementById("full-section").hidden = false;

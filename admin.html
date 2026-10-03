@@ -62,6 +62,18 @@
         </div>
 
         <div class="field">
+          <label>Contact number (shown only after payment)</label>
+          <input id="f-contact-phone" type="tel" placeholder="07XXXXXXXX">
+          <p class="hint">The uploader's number, revealed to buyers once they've paid, for getting more copies.</p>
+        </div>
+
+        <div class="field">
+          <label>Contact number (shown only after payment)</label>
+          <input id="f-contact-phone" type="tel" placeholder="07XXXXXXXX">
+          <p class="hint">The uploader's number, revealed to buyers once they've paid, for getting more copies.</p>
+        </div>
+
+        <div class="field">
           <label>Photos &amp; videos</label>
           <input id="f-media" type="file" multiple>
           <p class="hint">Select as many as you like. New items start locked; mark free previews afterward in "Manage items" below.</p>
@@ -314,6 +326,7 @@
       fPublished.checked = !!c.published;
       fCover.value = "";
       fMedia.value = "";
+      document.getElementById("f-contact-phone").value = c.contactPhone || "";
       pendingList.textContent = "";
       cancelButton.hidden = false;
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -324,6 +337,7 @@
       formTitle.textContent = "Add a new collection";
       fTitle.value = ""; fDescription.value = ""; fPrice.value = "";
       fPublished.checked = true; fCover.value = ""; fMedia.value = "";
+      document.getElementById("f-contact-phone").value = "";
       pendingList.textContent = "";
       cancelButton.hidden = true;
     }
@@ -347,6 +361,7 @@
         title: fTitle.value,
         description: fDescription.value,
         price: Number(fPrice.value),
+        contactPhone: document.getElementById("f-contact-phone").value,
         published: fPublished.checked
       };
 
