@@ -20,10 +20,33 @@ window.SITE = {
   var header = document.getElementById("site-header");
   if (header) {
     header.innerHTML =
-      '<header class="topbar"><div class="wrap">' +
+      '<header class="topbar" id="topbar"><div class="wrap">' +
       '<a class="logo" href="index.html">' + site.name + '</a>' +
-      '<nav class="nav"><a href="index.html#collections">Collections</a><a href="contact.html">Contact</a></nav>' +
+      '<nav class="nav" id="nav-menu"><a href="index.html#collections">Collections</a><a href="contact.html">Contact</a></nav>' +
+      '<button class="menu-toggle" id="menu-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>' +
       '</div></header>';
+
+    var topbar = document.getElementById("topbar");
+    var navMenu = document.getElementById("nav-menu");
+    var toggle = document.getElementById("menu-toggle");
+
+    toggle.addEventListener("click", function () {
+      var isOpen = navMenu.classList.toggle("open");
+      toggle.classList.toggle("open", isOpen);
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    });
+
+    navMenu.querySelectorAll("a").forEach(function (link) {
+      link.addEventListener("click", function () {
+        navMenu.classList.remove("open");
+        toggle.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+      });
+    });
+
+    window.addEventListener("scroll", function () {
+      topbar.classList.toggle("scrolled", window.scrollY > 8);
+    }, { passive: true });
   }
 
   var footer = document.getElementById("site-footer");
@@ -44,5 +67,22 @@ window.SITE = {
   if (whatsappLink && site.whatsapp) {
     whatsappLink.href = "https://wa.me/" + site.whatsapp;
     whatsappLink.hidden = false;
+  }
+
+  // Scroll-reveal: anything with class "reveal" fades up into view once,
+  // as the visitor scrolls to it, rather than all animating at once on load.
+  if ("IntersectionObserver" in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in-view");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+
+    document.addEventListener("DOMContentLoaded", function () {
+      document.querySelectorAll(".reveal").forEach(function (el) { observer.observe(el); });
+    });
   }
 })();
