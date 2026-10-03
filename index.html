@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>The Link-up Hub</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .how { padding: 8px 0 40px; }
+    .how ol { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .how li { background: var(--paper-card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm); }
+    .how .step-num { font-family: "Fraunces", Georgia, serif; font-size: 1.5rem; font-weight: 600; color: var(--ember-dark); }
+    .how h3 { font-size: 1rem; font-weight: 600; }
+    .how p { color: var(--ink-soft); font-size: 0.92rem; }
+    @media (max-width: 760px) { .how ol { grid-template-columns: 1fr; } }
+    .thumb-skeleton { width: 100%; height: 100%; }
+  </style>
 </head>
 <body>
   <div id="site-header"></div>
@@ -13,6 +23,28 @@
       <div class="wrap">
         <h1>Scenery worth seeing, up close.</h1>
         <p>Browse free previews from every collection. Unlock the full set with mobile money, view it anytime.</p>
+      </div>
+    </section>
+
+    <section class="how">
+      <div class="wrap">
+        <ol>
+          <li class="reveal">
+            <span class="step-num">01</span>
+            <h3>Browse free previews</h3>
+            <p>Every collection shows a few photos and a clip, free, no sign-up.</p>
+          </li>
+          <li class="reveal">
+            <span class="step-num">02</span>
+            <h3>Pay by mobile money</h3>
+            <p>MTN or Airtel. Approve the prompt on your own phone.</p>
+          </li>
+          <li class="reveal">
+            <span class="step-num">03</span>
+            <h3>View anytime</h3>
+            <p>Return with the same phone and email to view it again, whenever you like.</p>
+          </li>
+        </ol>
       </div>
     </section>
 
@@ -32,8 +64,17 @@
     const list = document.getElementById("collection-list");
     const note = document.getElementById("list-note");
 
-    function makeCard(c) {
-      const card = make("article", "coll-card");
+    function makeSkeletonCard() {
+      const card = make("div", "coll-card");
+      const thumb = make("div", "thumb skeleton");
+      card.append(thumb);
+      return card;
+    }
+
+    function makeCard(c, index) {
+      const card = make("article", "coll-card reveal");
+      card.style.transitionDelay = Math.min(index * 60, 300) + "ms";
+
       const link = make("a");
       link.href = "collection.html?id=" + encodeURIComponent(c.id);
 
@@ -41,6 +82,7 @@
       const imgUrl = coverUrl(c.coverImage);
       if (imgUrl) {
         const img = make("img");
+        img.loading = "lazy";
         img.src = imgUrl;
         img.alt = c.title;
         thumb.append(img);
@@ -56,6 +98,9 @@
     }
 
     async function load() {
+      // Show a few shimmering placeholders while collections load.
+      for (let i = 0; i < 3; i++) list.append(makeSkeletonCard());
+
       try {
         const collections = await fetchCollections();
         list.innerHTML = "";
@@ -66,9 +111,23 @@
         }
 
         note.textContent = "";
-        collections.forEach(function (c) { list.append(makeCard(c)); });
+        collections.forEach(function (c, i) { list.append(makeCard(c, i)); });
+
+        // Newly-added cards need the observer attached manually,
+        // since they're added after the page's own load event.
+        if ("IntersectionObserver" in window) {
+          requestAnimationFrame(function () {
+            document.querySelectorAll(".reveal:not(.in-view)").forEach(function (el) {
+              const rect = el.getBoundingClientRect();
+              if (rect.top < window.innerHeight) {
+                el.classList.add("in-view");
+              }
+            });
+          });
+        }
       } catch (error) {
         console.error(error);
+        list.innerHTML = "";
         note.textContent = "Collections could not be loaded. Please refresh.";
       }
     }
