@@ -142,12 +142,15 @@ img, video { max-width: 100%; }
 
 /* ---------- How it works ---------- */
 .how { padding: 8px 0 40px; }
-.how ol { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.how ol { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.how li.warning { background: #FBE4E4; border-color: #E8B4B4; }
+.how li.warning .step-num { color: var(--error); }
 .how li { background: var(--nude-card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 20px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm); }
 .how .step-num { font-family: "Fraunces", Georgia, serif; font-size: 1.5rem; font-weight: 600; color: var(--burgundy); }
 .how h3 { font-size: 1rem; font-weight: 600; }
 .how p { color: var(--ink-soft); font-size: 0.92rem; }
-@media (max-width: 760px) { .how ol { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .how ol { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .how ol { grid-template-columns: 1fr; } }
 
 /* ---------- Collection page ---------- */
 .coll-head { padding: 32px 0 8px; }
