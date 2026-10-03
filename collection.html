@@ -67,7 +67,7 @@
 
     function makeMediaTile(item, locked, srcUrl) {
       const tile = document.createElement("div");
-      tile.className = "media-item" + (locked ? " locked" : "");
+      tile.className = "media-item reveal" + (locked ? " locked" : "");
 
       if (!locked) {
         if (item.type === "video") {
@@ -113,7 +113,9 @@
 
         const freeGrid = document.getElementById("free-grid");
         collection.freeItems.forEach(function (item) {
-          freeGrid.append(makeMediaTile(item, false, API_BASE + "/media/" + item.fileKey));
+          const tile = makeMediaTile(item, false, API_BASE + "/media/" + item.fileKey);
+          freeGrid.append(tile);
+          if (window.observeReveal) window.observeReveal(tile);
         });
       } catch (error) {
         console.error(error);
@@ -149,7 +151,9 @@
       data.items.forEach(function (item) {
         const viewUrl = API_BASE + "/view/" + encodeURIComponent(collectionId) + "/" + encodeURIComponent(item.id) +
           "?phone=" + encodeURIComponent(phone) + "&email=" + encodeURIComponent(email);
-        fullGrid.append(makeMediaTile(item, false, viewUrl));
+        const tile = makeMediaTile(item, false, viewUrl);
+        fullGrid.append(tile);
+        if (window.observeReveal) window.observeReveal(tile);
       });
 
       const contactPreview = document.getElementById("contact-preview");
